@@ -1,60 +1,7 @@
 'use client'
-
 import { useState } from 'react'
-import {
-  BarChart3,
-  BookOpen,
-  CalendarDays,
-  ChevronRight,
-  ClipboardList,
-  GraduationCap,
-  Menu,
-  Settings,
-  Users,
-  X,
-} from 'lucide-react'
-
-const navItems = [
-  { label: 'Tổng quan', icon: BarChart3 },
-  { label: 'Phân phối chương trình', icon: BookOpen },
-  { label: 'Thời khóa biểu', icon: CalendarDays },
-  { label: 'Lớp học', icon: Users },
-  { label: 'Cài đặt', icon: Settings },
-]
-
-const schedule = [
-  ['Thứ 2', '08:00', 'Toán 10A1', 'Tiết 1'],
-  ['Thứ 2', '09:00', 'Toán 10A2', 'Tiết 2'],
-  ['Thứ 3', '08:00', 'Toán 11A1', 'Tiết 1'],
-  ['Thứ 4', '14:00', 'Chuyên đề 12A1', 'Tiết 3'],
-]
-
-export default function Page() {
-  const [active, setActive] = useState('Tổng quan')
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <aside className={`fixed inset-y-0 left-0 z-20 flex w-72 flex-col border-r border-border bg-card transition-transform md:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex h-20 items-center justify-between border-b border-border px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><GraduationCap className="size-5" /></div>
-            <div><p className="font-semibold tracking-tight">Kế hoạch dạy học</p><p className="text-xs text-muted-foreground">PPCT & Thời khóa biểu</p></div>
-          </div>
-          <button className="md:hidden" aria-label="Đóng menu" onClick={() => setMenuOpen(false)}><X className="size-5" /></button>
-        </div>
-        <nav className="flex flex-1 flex-col gap-1 p-4" aria-label="Điều hướng chính">
-          {navItems.map(({ label, icon: Icon }) => <button key={label} onClick={() => { setActive(label); setMenuOpen(false) }} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${active === label ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><Icon className="size-4" />{label}</button>)}
-        </nav>
-        <div className="border-t border-border p-4"><div className="rounded-lg bg-muted p-3"><p className="text-xs font-medium">Năm học</p><p className="mt-1 text-sm text-muted-foreground">2026 – 2027</p></div></div>
-      </aside>
-      {menuOpen && <button aria-label="Đóng menu" className="fixed inset-0 z-10 bg-foreground/20 md:hidden" onClick={() => setMenuOpen(false)} />}
-      <main className="md:pl-72">
-        <header className="flex h-20 items-center justify-between border-b border-border bg-card px-5 md:px-10"><div className="flex items-center gap-3"><button className="md:hidden" aria-label="Mở menu" onClick={() => setMenuOpen(true)}><Menu className="size-5" /></button><div><p className="text-sm text-muted-foreground">Thứ Sáu, 11 tháng 9, 2026</p><h1 className="text-xl font-semibold tracking-tight">{active}</h1></div></div><div className="hidden items-center gap-3 sm:flex"><span className="size-2 rounded-full bg-emerald-500" /><span className="text-sm text-muted-foreground">Hệ thống hoạt động</span></div></header>
-        <div className="mx-auto max-w-7xl space-y-8 p-5 md:p-10">
-          {active !== 'Tổng quan' ? <section className="rounded-xl border border-border bg-card p-8"><div className="flex items-center gap-3"><ClipboardList className="size-5 text-primary" /><h2 className="text-lg font-semibold">{active}</h2></div><p className="mt-2 text-muted-foreground">Khu vực {active.toLowerCase()} đang sẵn sàng để sử dụng.</p><button onClick={() => setActive('Tổng quan')} className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-primary">Quay lại tổng quan <ChevronRight className="size-4" /></button></section> : <><section><p className="text-sm font-medium text-muted-foreground">Xin chào, giáo viên</p><h2 className="mt-1 text-3xl font-semibold tracking-tight text-balance">Tổng quan năm học</h2><p className="mt-2 text-muted-foreground">Theo dõi tiến độ giảng dạy và lịch học của bạn.</p></section><section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[['Lớp học', '12', 'lớp đang quản lý'], ['Môn học', '4', 'môn học'], ['Tiết đã dạy', '248', 'trong năm học'], ['Tiến độ', '71%', 'hoàn thành chương trình']].map(([title, value, note]) => <div className="rounded-xl border border-border bg-card p-5" key={title}><p className="text-sm text-muted-foreground">{title}</p><p className="mt-3 text-3xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-xs text-muted-foreground">{note}</p></div>)}</section><section className="rounded-xl border border-border bg-card"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h3 className="font-semibold">Lịch dạy sắp tới</h3><p className="mt-1 text-sm text-muted-foreground">Các tiết học trong tuần này</p></div><button onClick={() => setActive('Thời khóa biểu')} className="text-sm font-medium text-primary">Xem tất cả</button></div><div className="divide-y divide-border">{schedule.map(([day, time, subject, lesson]) => <div className="flex items-center gap-4 px-5 py-4" key={`${day}-${time}`}><div className="w-16 text-sm font-medium">{day}</div><div className="w-14 text-sm text-muted-foreground">{time}</div><div className="flex-1"><p className="text-sm font-medium">{subject}</p><p className="text-xs text-muted-foreground">{lesson}</p></div><ChevronRight className="size-4 text-muted-foreground" /></div>)}</div></section></>}
-        </div>
-      </main>
-    </div>
-  )
-}
+import { BarChart3, BookOpen, CalendarDays, GraduationCap, Menu, Settings, Users, X, Upload, FileSpreadsheet, TrendingUp } from 'lucide-react'
+import { authClient } from '@/lib/auth-client'
+const nav=[['Tổng quan',BarChart3],['Phân phối chương trình',BookOpen],['Thời khóa biểu',CalendarDays],['Lớp học',Users],['Cài đặt',Settings]] as const
+const stats=[['Lớp học','12','lớp đang quản lý'],['Môn học','4','môn học'],['Tiết đã dạy','248','trong năm học'],['Tiến độ','71%','hoàn thành chương trình']]
+export default function Page(){const [active,setActive]=useState('Tổng quan');const [open,setOpen]=useState(false); const [imported,setImported]=useState(false); return <div className="min-h-screen bg-background text-foreground"><aside className={`fixed inset-y-0 left-0 z-20 flex w-72 flex-col border-r border-border bg-card transition-transform md:translate-x-0 ${open?'translate-x-0':'-translate-x-full'}`}><div className="flex h-20 items-center justify-between border-b border-border px-6"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><GraduationCap className="size-5"/></div><div><p className="font-semibold">Kế hoạch dạy học</p><p className="text-xs text-muted-foreground">PPCT & Thời khóa biểu</p></div></div><button className="md:hidden" onClick={()=>setOpen(false)} aria-label="Đóng menu"><X/></button></div><nav className="flex flex-1 flex-col gap-1 p-4">{nav.map(([label,Icon])=><button key={label} onClick={()=>{setActive(label);setOpen(false)}} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${active===label?'bg-primary text-primary-foreground':'text-muted-foreground hover:bg-muted'}`}><Icon className="size-4"/>{label}</button>)}</nav><div className="border-t border-border p-4"><div className="rounded-lg bg-muted p-3"><p className="text-xs font-medium">Năm học</p><p className="mt-1 text-sm text-muted-foreground">2026 – 2027</p></div></div></aside>{open&&<button className="fixed inset-0 z-10 bg-foreground/20 md:hidden" onClick={()=>setOpen(false)} aria-label="Đóng menu"/>}<main className="md:pl-72"><header className="flex h-20 items-center justify-between border-b border-border bg-card px-5 md:px-10"><div className="flex items-center gap-3"><button className="md:hidden" onClick={()=>setOpen(true)} aria-label="Mở menu"><Menu/></button><div><p className="text-sm text-muted-foreground">Thứ Sáu, 11 tháng 9, 2026</p><h1 className="text-xl font-semibold">{active}</h1></div></div><button onClick={()=>authClient.signOut()} className="text-sm text-muted-foreground hover:text-foreground">Đăng xuất</button></header><div className="mx-auto max-w-7xl space-y-8 p-5 md:p-10">{active==='Tổng quan'?<><section><p className="text-sm font-medium text-muted-foreground">Xin chào, giáo viên</p><h2 className="mt-1 text-3xl font-semibold">Tổng quan năm học</h2><p className="mt-2 text-muted-foreground">Theo dõi tiến độ giảng dạy và lịch học của bạn.</p></section><section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{stats.map(([t,v,n])=><div key={t} className="rounded-xl border border-border bg-card p-5"><p className="text-sm text-muted-foreground">{t}</p><p className="mt-3 text-3xl font-semibold">{v}</p><p className="mt-1 text-xs text-muted-foreground">{n}</p></div>)}</section><section className="grid gap-4 md:grid-cols-3"><button onClick={()=>setActive('Phân phối chương trình')} className="rounded-xl border border-border bg-card p-5 text-left hover:border-primary"><Upload className="size-5 text-primary"/><h3 className="mt-4 font-semibold">Import PPCT</h3><p className="mt-1 text-sm text-muted-foreground">Tải lên file Word để tạo chương trình.</p></button><button onClick={()=>setActive('Thời khóa biểu')} className="rounded-xl border border-border bg-card p-5 text-left hover:border-primary"><CalendarDays className="size-5 text-primary"/><h3 className="mt-4 font-semibold">Xếp thời khóa biểu</h3><p className="mt-1 text-sm text-muted-foreground">Thiết lập lịch dạy theo tuần.</p></button><button onClick={()=>setActive('Lớp học')} className="rounded-xl border border-border bg-card p-5 text-left hover:border-primary"><TrendingUp className="size-5 text-primary"/><h3 className="mt-4 font-semibold">Theo dõi tiến độ</h3><p className="mt-1 text-sm text-muted-foreground">Cập nhật trạng thái từng buổi học.</p></button></section></>:<section className="rounded-xl border border-border bg-card p-8"><div className="flex items-center gap-3"><FileSpreadsheet className="size-5 text-primary"/><h2 className="text-lg font-semibold">{active}</h2></div><p className="mt-2 text-muted-foreground">{active==='Phân phối chương trình'?'Tải file .docx PPCT để bắt đầu import và quản lý dữ liệu.':'Khu vực này đã được chuyển sang Next.js và sẵn sàng kết nối dữ liệu Neon.'}</p>{active==='Phân phối chương trình'&&<label className="mt-6 block rounded-lg border-2 border-dashed border-border p-8 text-center"><input type="file" accept=".docx" className="sr-only" onChange={()=>setImported(true)}/><Upload className="mx-auto size-8 text-muted-foreground"/><span className="mt-3 block text-sm">Chọn file PPCT Word</span>{imported&&<span className="mt-2 block text-sm text-primary">Đã nhận file, sẵn sàng phân tích.</span>}</label>}</section>}</div></main></div>}

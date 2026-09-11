@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'Kế hoạch dạy học | PPCT & Thời khóa biểu',
+  description: 'Quản lý phân phối chương trình, thời khóa biểu và tiến độ giảng dạy.',
   generator: 'v0.app',
   icons: {
     icon: [
