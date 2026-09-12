@@ -382,22 +382,32 @@ function khoiOverview(): array
 {
     $out = [];
     foreach (IMPORT_KHOI as $khoi) {
-        $tracks = rows('SELECT t.*, s.ten_mon, s.so_tiet_tuan_mac_dinh FROM ppct_tracks t JOIN subjects s ON s.id = t.subject_id WHERE s.khoi = ? ORDER BY t.loai_track, t.id', [$khoi]);
-        $core = 0;
-        $cd = 0;
-        $file = '';
-        $date = '';
-        $subject = '';
-        $weekly = 3;
-        foreach ($tracks as $track) {
-            $subject = (string)$track['ten_mon'];
-            $file = (string)$track['file_nguon'];
-            $date = (string)$track['ngay_import'];
-            $weekly = (int)$track['so_tiet_tuan_mac_dinh'];
-            if ($track['loai_track'] === 'chinh_khoa') $core += (int)$track['tong_so_tiet'];
-            else $cd += (int)$track['tong_so_tiet'];
+        $subjects = rows('SELECT * FROM subjects WHERE khoi = ? ORDER BY ten_mon', [$khoi]);
+        $list = [];
+        foreach ($subjects as $subject) {
+            $tracks = rows('SELECT * FROM ppct_tracks WHERE subject_id = ? ORDER BY loai_track, id', [(int)$subject['id']]);
+            $core = 0;
+            $cd = 0;
+            $file = '';
+            $date = '';
+            foreach ($tracks as $track) {
+                $file = (string)$track['file_nguon'];
+                $date = (string)$track['ngay_import'];
+                if ($track['loai_track'] === 'chinh_khoa') $core += (int)$track['tong_so_tiet'];
+                else $cd += (int)$track['tong_so_tiet'];
+            }
+            $list[] = [
+                'id' => (int)$subject['id'],
+                'ten_mon' => (string)$subject['ten_mon'],
+                'weekly' => (int)$subject['so_tiet_tuan_mac_dinh'],
+                'tracks' => $tracks,
+                'core' => $core,
+                'cd' => $cd,
+                'file' => $file,
+                'date' => $date,
+            ];
         }
-        $out[$khoi] = ['tracks' => $tracks, 'core' => $core, 'cd' => $cd, 'file' => $file, 'date' => $date, 'subject' => $subject, 'weekly' => $weekly, 'ready' => $tracks !== []];
+        $out[$khoi] = ['subjects' => $list, 'ready' => $list !== []];
     }
     return $out;
 }
@@ -626,13 +636,9 @@ function handlePost(): void
                 $skippedAll = [];
                 backup(); $db = db(); $db->beginTransaction();
                 try {
-                    $subjectId = (int)scalar('SELECT id FROM subjects WHERE khoi = ? ORDER BY id LIMIT 1', [$khoi]);
-                    if ($subjectId) {
-                        $db->prepare('UPDATE subjects SET ten_mon = ?, so_tiet_tuan_mac_dinh = ? WHERE id = ?')->execute([$subjectName, $weekly, $subjectId]);
-                    } else {
-                        $db->prepare('INSERT INTO subjects(ten_mon,khoi,so_tiet_tuan_mac_dinh) VALUES(?,?,?)')->execute([$subjectName, $khoi, $weekly]);
-                        $subjectId = (int)$db->lastInsertId();
-                    }
+                    $db->prepare('INSERT INTO subjects(ten_mon,khoi,so_tiet_tuan_mac_dinh) VALUES(?,?,?) ON CONFLICT(ten_mon,khoi) DO UPDATE SET so_tiet_tuan_mac_dinh=excluded.so_tiet_tuan_mac_dinh')->execute([$subjectName, $khoi, $weekly]);
+                    $subjectId = (int)scalar('SELECT id FROM subjects WHERE ten_mon = ? AND khoi = ?', [$subjectName, $khoi]);
+                    if (!$subjectId) throw new RuntimeException('Không lưu được môn học.');
                     foreach (['chinh_khoa' => 'Chính khóa', 'chuyen_de' => 'Chuyên đề'] as $type => $label) {
                         $raw = $posted[$type] ?? [];
                         [$items, $skipped] = uniquifyItems(is_array($raw) ? $raw : []);
@@ -661,10 +667,12 @@ function handlePost(): void
                 flash('success', 'Đã hủy bản xem trước.'); back('import');
             case 'import_update_saved':
                 $khoi = (int)($_POST['khoi'] ?? 0);
+                $subjectId = (int)($_POST['subject_id'] ?? 0);
                 if (!isKhoi($khoi)) throw new RuntimeException('Khối không hợp lệ.');
+                if (!scalar('SELECT id FROM subjects WHERE id = ? AND khoi = ?', [$subjectId, $khoi])) throw new RuntimeException('Không tìm thấy môn học của khối này.');
                 $posted = $_POST['groups'] ?? [];
-                $tracks = rows('SELECT t.id, t.loai_track, t.file_nguon, t.ten_track FROM ppct_tracks t JOIN subjects s ON s.id = t.subject_id WHERE s.khoi = ?', [$khoi]);
-                if (!$tracks) throw new RuntimeException('Khối này chưa có PPCT để sửa.');
+                $tracks = rows('SELECT t.id, t.loai_track, t.file_nguon, t.ten_track FROM ppct_tracks t WHERE t.subject_id = ?', [$subjectId]);
+                if (!$tracks) throw new RuntimeException('Môn này chưa có PPCT để sửa.');
                 backup(); $db = db(); $db->beginTransaction();
                 try {
                     $updated = [];
@@ -683,7 +691,7 @@ function handlePost(): void
                     }
                     $db->commit();
                     flash('success', 'Đã cập nhật PPCT khối ' . $khoi . ($updated ? ': ' . implode(', ', $updated) : '') . '.');
-                    back('import', ['edit' => $khoi]);
+                    back('import', ['edit' => $khoi, 'subject' => $subjectId]);
                 } catch (Throwable $e) { $db->rollBack(); throw $e; }
             case 'add_class':
                 $name = trim((string)$_POST['class_name']); $subjectId = (int)$_POST['subject_id']; $grade = (int)scalar('SELECT khoi FROM subjects WHERE id=?', [$subjectId]); if ($name === '' || !$grade) throw new RuntimeException('Chọn môn–khối và nhập tên lớp.');
@@ -741,6 +749,7 @@ handlePost();
 $page = $_GET['page'] ?? 'dashboard'; $allowed = ['dashboard','import','classes','schedule','progress','export','settings']; if (!in_array($page,$allowed,true)) $page='dashboard';
 if ($page === 'import' && isset($_GET['reset'])) unset($_SESSION['import']);
 $importEditKhoi = isKhoi((int)($_GET['edit'] ?? 0)) ? (int)$_GET['edit'] : 0;
+$importEditSubject = (int)($_GET['subject'] ?? 0);
 $khoiStatus = khoiOverview();
 $stats = ['tracks'=>(int)scalar('SELECT COUNT(*) FROM ppct_tracks'),'classes'=>(int)scalar('SELECT COUNT(*) FROM classes'),'slots'=>(int)scalar('SELECT COUNT(*) FROM tkb_slots'),'lessons'=>(int)scalar('SELECT COUNT(*) FROM buoi_day')];
 function nav(string $current): string { $items=['dashboard'=>['⌂','Tổng quan'],'import'=>['⇧','Import PPCT'],'classes'=>['▦','Lớp & TKB'],'schedule'=>['◷','Lịch giảng dạy'],'progress'=>['◔','Tiến độ'],'export'=>['⇩','Xuất báo cáo'],'settings'=>['⚙','Thiết lập']]; $out=''; foreach($items as $p=>[$i,$label]) $out.='<a class="nav-link '.($current===$p?'active':'').'" href="?page='.$p.'"><span>'.$i.'</span>'.$label.'</a>'; return $out; }
@@ -764,19 +773,21 @@ function nav(string $current): string { $items=['dashboard'=>['⌂','Tổng quan
 <section class="hero"><div><h1>Chào <?= h(value('teacher_name') ?: 'thầy/cô') ?> 👋</h1><p>Quản lý phân phối chương trình, thời khóa biểu và lịch báo giảng tại một nơi — rõ ràng, nhất quán, sẵn sàng để xuất báo cáo.</p></div><a class="btn" href="?page=import">⇧ Import PPCT mới</a></section>
 <div class="stats"><div class="stat"><span class="icon">▤</span><strong><?= $stats['tracks'] ?></strong><small>Chương trình PPCT</small></div><div class="stat"><span class="icon">♙</span><strong><?= $stats['classes'] ?></strong><small>Lớp đang phụ trách</small></div><div class="stat"><span class="icon">▦</span><strong><?= $stats['slots'] ?></strong><small>Tiết trong TKB/tuần</small></div><div class="stat"><span class="icon">◷</span><strong><?= $stats['lessons'] ?></strong><small>Buổi đã sinh lịch</small></div></div>
 <div class="grid two" style="margin-top:18px"><section class="card"><h2>Bắt đầu theo từng bước</h2><p class="subtle">Thiết lập nhanh cho một năm học mới.</p><ol class="list" style="margin-top:10px"><?php $steps=[['Import PPCT khối 10, 11, 12','import',$stats['tracks']>0],['Thêm lớp và gán thời khóa biểu','classes',$stats['classes']>0&&$stats['slots']>0],['Sinh lịch giảng dạy','schedule',$stats['lessons']>0],['Theo dõi, cập nhật và xuất báo cáo','export',false]]; foreach($steps as $n=>$step): ?><li><span><span class="check"><?= $step[2]?'✓':$n+1 ?></span> <strong><?= h($step[0]) ?></strong></span><a class="btn quiet" href="?page=<?= $step[1] ?>">Mở</a></li><?php endforeach ?></ol></section>
-<section class="card"><h2>PPCT theo khối</h2><ul class="list"><?php foreach(IMPORT_KHOI as $khoi): $st=$khoiStatus[$khoi]; ?><li><span><strong>Khối <?=$khoi?></strong><span class="mini"><br><?php if($st['ready']): ?><?=h($st['subject'])?> · CK <?=$st['core']?> tiết<?php if($st['cd']): ?> · CĐ <?=$st['cd']?> tiết<?php endif ?><?php else: ?>Chưa upload<?php endif ?></span></span><span class="badge <?=$st['ready']?'ok':'warn'?>"><?=$st['ready']?'Đã parse':'Chưa có'?></span></li><?php endforeach ?></ul></section></div>
+<section class="card"><h2>PPCT theo khối</h2><ul class="list"><?php foreach(IMPORT_KHOI as $khoi): $st=$khoiStatus[$khoi]; ?><li><span><strong>Khối <?=$khoi?></strong><span class="mini"><br><?php if($st['ready']): ?><?php foreach($st['subjects'] as $sub): ?><?=h($sub['ten_mon'])?> · CK <?=$sub['core']?> tiết<?php if($sub['cd']): ?> · CĐ <?=$sub['cd']?> tiết<?php endif ?><?php if($sub !== end($st['subjects'])): ?> · <?php endif; endforeach ?><?php else: ?>Chưa upload<?php endif ?></span></span><span class="badge <?=$st['ready']?'ok':'warn'?>"><?=$st['ready']?'Đã parse':'Chưa có'?></span></li><?php endforeach ?></ul></section></div>
 <?php elseif ($page === 'import'): $import=$_SESSION['import']??null; ?>
-<section class="hero"><div><h1>Import PPCT theo khối</h1><p>Mỗi khối một tệp Word. Ứng dụng tự tách chính khóa và chuyên đề. Có thể mở lại để sửa sau khi lưu.</p></div></section>
+<section class="hero"><div><h1>Import PPCT theo khối</h1><p>Mỗi khối có thể nhiều môn. Upload từng môn riêng — không đè môn đã lưu. Tự tách chính khóa và chuyên đề.</p></div></section>
 <div class="khoi-grid">
 <?php foreach (IMPORT_KHOI as $khoi): $st=$khoiStatus[$khoi]; $pending=($import['khoi']??null)===$khoi; ?>
 <article class="khoi-card <?=$st['ready']?'ready':''?>">
 <h2>Khối <?=$khoi?> <?php if($pending): ?><span class="badge warn">Đang xem trước</span><?php elseif($st['ready']): ?><span class="badge ok">Đã parse</span><?php else: ?><span class="badge">Chưa upload</span><?php endif ?></h2>
 <?php if($st['ready']): ?>
-<div class="khoi-meta"><span class="badge core">Chính khóa <?=$st['core']?> tiết</span><?php if($st['cd']): ?><span class="badge elective">Chuyên đề <?=$st['cd']?> tiết</span><?php else: ?><span class="badge">Chưa có chuyên đề</span><?php endif ?></div>
-<p class="file"><?=h($st['subject']?:'Chưa có môn')?><?php if($st['file']): ?> · <?=h($st['file'])?><?php endif ?><?php if($st['date']): ?> · <?=h(date('d/m/Y H:i', strtotime($st['date'])))?><?php endif ?></p>
-<div class="action-row" style="margin-top:4px"><a class="btn quiet" href="?page=import&amp;edit=<?=$khoi?>">Mở sửa</a></div>
+<?php foreach($st['subjects'] as $sub): ?>
+<div class="khoi-meta" style="margin-top:8px"><strong><?=h($sub['ten_mon'])?></strong> <span class="badge core">CK <?=$sub['core']?></span><?php if($sub['cd']): ?> <span class="badge elective">CĐ <?=$sub['cd']?></span><?php endif ?></div>
+<p class="file"><?php if($sub['file']): ?><?=h($sub['file'])?><?php endif ?><?php if($sub['date']): ?> · <?=h(date('d/m/Y H:i', strtotime($sub['date'])))?><?php endif ?></p>
+<div class="action-row" style="margin-top:2px"><a class="btn quiet" href="?page=import&amp;edit=<?=$khoi?>&amp;subject=<?=$sub['id']?>">Mở sửa <?=h($sub['ten_mon'])?></a></div>
+<?php endforeach ?>
 <?php else: ?>
-<p class="file">Chưa có PPCT. Tải tệp .docx có cả chính khóa và chuyên đề.</p>
+<p class="file">Chưa có PPCT. Tải tệp .docx có cả chính khóa và chuyên đề. Mỗi môn một lần upload — không đè môn khác cùng khối.</p>
 <?php endif ?>
 <form class="upload-mini" method="post" enctype="multipart/form-data">
 <input type="hidden" name="csrf" value="<?=csrf()?>">
@@ -784,7 +795,7 @@ function nav(string $current): string { $items=['dashboard'=>['⌂','Tổng quan
 <input type="hidden" name="return_page" value="import">
 <input type="hidden" name="khoi" value="<?=$khoi?>">
 <input type="file" name="docx" accept=".docx,.doc" required>
-<button class="btn <?=$st['ready']?'secondary':''?>" type="submit"><?=$st['ready']?'Upload lại':'Upload PPCT'?></button>
+<button class="btn <?=$st['ready']?'secondary':''?>" type="submit"><?=$st['ready']?'Thêm môn / cập nhật':'Upload PPCT'?></button>
 </form>
 </article>
 <?php endforeach ?>
@@ -820,17 +831,18 @@ function nav(string $current): string { $items=['dashboard'=>['⌂','Tổng quan
 </form>
 <form method="post" style="margin-top:8px"><input type="hidden" name="csrf" value="<?=csrf()?>"><input type="hidden" name="action" value="import_cancel"><button class="btn quiet" type="submit">Hủy xem trước</button></form>
 </section>
-<?php elseif($importEditKhoi): $edit=$khoiStatus[$importEditKhoi]; ?>
+<?php elseif($importEditKhoi): $edit=$khoiStatus[$importEditKhoi]; $editSubject=null; foreach($edit['subjects'] as $sub) if((int)$sub['id']===$importEditSubject) { $editSubject=$sub; break; } if(!$editSubject && $edit['subjects']) $editSubject=$edit['subjects'][0]; ?>
 <section class="card"><h2>Sửa PPCT khối <?=$importEditKhoi?></h2>
-<?php if(!$edit['ready']): ?><p class="empty">Khối này chưa có dữ liệu.</p>
+<?php if(!$editSubject): ?><p class="empty">Khối này chưa có dữ liệu.</p>
 <?php else: ?>
-<p class="subtle"><?=h($edit['subject'])?> · <?=h($edit['file'])?></p>
+<p class="subtle"><?=h($editSubject['ten_mon'])?><?php if($editSubject['file']): ?> · <?=h($editSubject['file'])?><?php endif ?></p>
 <form method="post" style="margin-top:14px">
 <input type="hidden" name="csrf" value="<?=csrf()?>">
 <input type="hidden" name="action" value="import_update_saved">
 <input type="hidden" name="return_page" value="import">
 <input type="hidden" name="khoi" value="<?=$importEditKhoi?>">
-<?php foreach ($edit['tracks'] as $track): $items=rows('SELECT * FROM ppct_items WHERE track_id=? ORDER BY tiet_so,id',[(int)$track['id']]); $type=$track['loai_track']; ?>
+<input type="hidden" name="subject_id" value="<?=$editSubject['id']?>">
+<?php foreach ($editSubject['tracks'] as $track): $items=rows('SELECT * FROM ppct_items WHERE track_id=? ORDER BY tiet_so,id',[(int)$track['id']]); $type=$track['loai_track']; ?>
 <h3 style="margin:18px 0 8px"><?=$type==='chinh_khoa'?'Chính khóa':'Chuyên đề'?> · <?=count($items)?> tiết</h3>
 <div class="table-wrap"><table class="table"><thead><tr><th>Tiết</th><th>Bài học / Chủ đề</th><th>Nội dung chi tiết</th><th>Yêu cầu cần đạt</th><th>Cảnh báo</th></tr></thead><tbody>
 <?php foreach($items as $i=>$item): ?>
