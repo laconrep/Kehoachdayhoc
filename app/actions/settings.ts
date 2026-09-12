@@ -1,16 +1,14 @@
 'use server'
 
-import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { settings } from '@/lib/db/schema'
-import { headers } from 'next/headers'
+import { upsertSettings } from '@/lib/ppct/api'
+import { requireUser } from '@/lib/session'
 
 export async function saveSettings(formData: FormData) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error('Unauthorized')
+  const user = await requireUser()
   const schoolYear = String(formData.get('schoolYear') || '').trim()
   const teacherName = String(formData.get('teacherName') || '').trim()
+  const startDate = String(formData.get('startDate') || '').trim()
   const totalWeeks = Number(formData.get('totalWeeks'))
-  if (!schoolYear || !teacherName || !Number.isInteger(totalWeeks) || totalWeeks < 1 || totalWeeks > 52) throw new Error('Invalid settings')
-  return db.insert(settings).values({ userId: session.user.id, schoolYear, teacherName, totalWeeks }).returning()
+  if (!schoolYear || !startDate || !Number.isInteger(totalWeeks) || totalWeeks < 1 || totalWeeks > 52) throw new Error('Invalid settings')
+  await upsertSettings(user.id, { schoolYear, startDate, totalWeeks, teacherName })
 }

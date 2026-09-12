@@ -1,23 +1,20 @@
 'use server'
 
-import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { lessons } from '@/lib/db/schema'
-import { headers } from 'next/headers'
+import { generateYearSchedule, updateLesson } from '@/lib/ppct/api'
+import { requireUser } from '@/lib/session'
 
-export async function generateSchedule(formData: FormData) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error('Unauthorized')
-  const classId = Number(formData.get('classId'))
-  const weeks = Number(formData.get('weeks'))
-  const title = String(formData.get('title') || '').trim()
-  if (!Number.isInteger(classId) || classId < 1 || !Number.isInteger(weeks) || weeks < 1 || weeks > 52 || !title) throw new Error('Invalid schedule')
-  const rows = Array.from({ length: weeks }, (_, index) => ({ userId: session.user.id, classId, week: index + 1, day: 'Thứ Hai', period: 1, title, status: 'Bình thường', note: null }))
-  return db.insert(lessons).values(rows).returning()
+export async function generateSchedule() {
+  const user = await requireUser()
+  const count = await generateYearSchedule(user.id)
+  return { count }
 }
 
 export async function updateLessonStatus(formData: FormData) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error('Unauthorized')
-  return { ok: true, userId: session.user.id, status: String(formData.get('status') || 'Bình thường') }
+  const user = await requireUser()
+  const lessonId = Number(formData.get('lessonId'))
+  const status = String(formData.get('status') || 'Bình thường')
+  const note = String(formData.get('note') || '')
+  const itemRaw = Number(formData.get('itemId') || 0)
+  if (!Number.isInteger(lessonId) || lessonId < 1) throw new Error('Không tìm thấy buổi dạy.')
+  await updateLesson(user.id, lessonId, status, note, itemRaw > 0 ? itemRaw : null)
 }

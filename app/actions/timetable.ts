@@ -1,18 +1,17 @@
 'use server'
 
-import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { timetableEntries } from '@/lib/db/schema'
-import { headers } from 'next/headers'
+import { saveTimetable } from '@/lib/ppct/api'
+import { requireUser } from '@/lib/session'
+import type { TrackType } from '@/lib/ppct/constants'
+
+export async function saveTimetableGrid(formData: FormData) {
+  const user = await requireUser()
+  const teacherIdRaw = Number(formData.get('teacherId') || 0)
+  const teacherId = teacherIdRaw > 0 ? teacherIdRaw : undefined
+  const slots = JSON.parse(String(formData.get('slots') || '[]')) as Array<{ classId: number; day: number; session: string; period: number; type: TrackType }>
+  await saveTimetable(user.id, Array.isArray(slots) ? slots : [], teacherId)
+}
 
 export async function saveTimetableEntry(formData: FormData) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error('Unauthorized')
-  const classId = Number(formData.get('classId'))
-  const period = Number(formData.get('period'))
-  const day = String(formData.get('day') || '').trim()
-  const studySession = String(formData.get('session') || '').trim()
-  const subject = String(formData.get('subject') || '').trim()
-  if (!Number.isInteger(classId) || classId < 1 || !Number.isInteger(period) || period < 1 || period > 5 || !day || !studySession || !subject) throw new Error('Invalid timetable entry')
-  return db.insert(timetableEntries).values({ userId: session.user.id, classId, day, session: studySession, period, subject }).returning()
+  return saveTimetableGrid(formData)
 }
