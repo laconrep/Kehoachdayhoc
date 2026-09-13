@@ -1,16 +1,30 @@
 'use server'
 
-import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { classes } from '@/lib/db/schema'
-import { headers } from 'next/headers'
+import { addClass, assignElective, assignTeacher } from '@/lib/ppct/api'
+import { requireUser } from '@/lib/session'
 
 export async function createClass(formData: FormData) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error('Unauthorized')
+  const user = await requireUser()
   const name = String(formData.get('name') || '').trim()
   const teacher = String(formData.get('teacher') || '').trim()
-  const grade = Number(formData.get('grade') || 10)
-  if (!name || !teacher || ![10, 11, 12].includes(grade)) throw new Error('Invalid class')
-  return db.insert(classes).values({ userId: session.user.id, name, teacher, grade }).returning()
+  const subjectId = Number(formData.get('subjectId'))
+  if (!name || !teacher || !Number.isInteger(subjectId) || subjectId < 1) throw new Error('Chọn môn–khối và nhập tên lớp, giáo viên.')
+  return addClass(user.id, name, subjectId, teacher)
+}
+
+export async function assignClassTeacher(formData: FormData) {
+  const user = await requireUser()
+  const classId = Number(formData.get('classId'))
+  const teacher = String(formData.get('teacher') || '').trim()
+  if (!Number.isInteger(classId) || classId < 1 || !teacher) throw new Error('Thiếu lớp hoặc tên giáo viên.')
+  await assignTeacher(user.id, classId, teacher)
+}
+
+export async function assignClassElective(formData: FormData) {
+  const user = await requireUser()
+  const classId = Number(formData.get('classId'))
+  const trackId = Number(formData.get('trackId'))
+  const hours = Number(formData.get('hours') || 1)
+  if (!Number.isInteger(classId) || !Number.isInteger(trackId)) throw new Error('Lớp hoặc chuyên đề không hợp lệ.')
+  await assignElective(user.id, classId, trackId, hours)
 }
